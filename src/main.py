@@ -1,20 +1,28 @@
-from src.power import power_function
-from src.constants import SAMPLE_CONSTANT
+from src.parser import calculate
 
 
-def main() -> None:
-    """
-    Обязательнная составляющая программ, которые сдаются. Является точкой входа в приложение
-    :return: Данная функция ничего не возвращает
-    """
+def main():
+    print("Калькулятор M1 (Рекурсивный спуск)")
+    print("Поддерживает: +, -, *, /, //, %, **, скобки, унарные +/-")
+    print("Введите 'exit' для выхода")
 
-    target, degree = map(int, input("Введите два числа разделенные пробелом: ").split(" "))
+    while True:
+        try:
+            expression = input("> ").strip()
+            if expression.lower() == 'exit':
+                break
+            if not expression:
+                raise ValueError("Пустое выражение")
 
-    result = power_function(target=target, power=degree)
+            result = calculate(expression)
+            print(f"Результат: {result}")
 
-    print(result)
+        except (SyntaxError, ValueError, ZeroDivisionError, TypeError) as e:
+            print(f"Ошибка: {e}")
+        except KeyboardInterrupt:
+            print("\nВыход...")
+            break
 
-    print(SAMPLE_CONSTANT)
 
 if __name__ == "__main__":
     main()
