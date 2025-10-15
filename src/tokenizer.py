@@ -1,45 +1,33 @@
-from .constants import SYMBOLS, DIGITS
+from src.constants import DIGITS, SYMBOLS
 
 
-def tokenize(expression):
-    # Временная замена двойных операторов на однобуквенные для упрощения разбора
-    exp = expression.replace('**', 'p').replace('//', 'd')
-    res = []
-    s = ''  # накопитель для текущего числа
-    i = 0
+def tokenize(expression: str) -> list[str]:
+    """Разбивает математическое выражение на токены"""
 
-    while i < len(exp):
-        char = exp[i]
+    expression = expression.replace('**', 'p').replace('//', 'd')
 
-        # Пробелы разделяют числа
+    s = ''  # накопитель текущего числа
+    result = []
+    for char in expression:
+
         if char == ' ':
             if s != '':
-                res.append(s)
+                result.append(s)
                 s = ''
-            i += 1
             continue
 
-        # Собираем цифры и точки в число
-        if char in DIGITS:
+        elif char in DIGITS:
             s += char
 
-        # Операторы и скобки - завершаем текущее число и добавляем оператор
         elif char in SYMBOLS:
             if s != '':
-                res.append(s)
+                result.append(s)
                 s = ''
-            # Возвращаем оригинальные операторы обратно
-            token = char.replace('d', '//').replace('p', '**')
-            res.append(token)
-
-        # Любой другой символ - ошибка
+            result.append(char.replace('p', '**').replace('d', '//'))
         else:
-            raise SyntaxError(f"Неизвестный символ: {char}")
+            raise SyntaxError(f'Неизвестный символ: {char}')
 
-        i += 1
-
-    # Добавляем последнее число, если оно есть
     if s != '':
-        res.append(s)
+        result.append(s)
 
-    return res
+    return result

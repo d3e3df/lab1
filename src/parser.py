@@ -1,153 +1,128 @@
-from .tokenizer import tokenize
-
-# Глобальные переменные состояния парсера
-tokens: list[str] = []
-current_token = None
-pos = 0
+from src.tokenizer import tokenize
 
 
-def next_token():
-    global pos, current_token
-    pos += 1
-    current_token = tokens[pos] if pos < len(tokens) else None
+class Calculator:
+    """Калькулятор"""
 
+    def __init__(self) -> None:
+        """Инициализация переменных состояния парсера"""
+        self.tokens: list[str] = []
+        self.current_token: str | None = None
+        self.pos: int = 0
 
-def primary():
-    """Обрабатывает числа и скобки"""
-    global current_token
+    def next_token(self) -> None:
+        """Переход к следующему токену"""
+        self.pos += 1
+        self.current_token = self.tokens[self.pos] if self.pos < len(self.tokens) else None
 
-    # Если видим скобку - разбираем выражение внутри
-    if current_token == '(':
-        next_token()
-        result = expr()  # рекурсивно разбираем что внутри скобок
-        if current_token != ')':
-            raise SyntaxError("Ожидалась )")
-        next_token()
+    def primary(self) -> float:
+        """Обрабатывает выражения в скобках или числа"""
+        if self.current_token == '(':
+            self.next_token()
+            result = self.expr()
+            if self.current_token != ')':
+                raise SyntaxError("Ожидалась )")
+            self.next_token()
+        else:
+            if self.current_token is None:
+                raise SyntaxError("Выражение неполное - ожидалось число")
+            try:
+                result = float(self.current_token)
+            except ValueError:
+                raise SyntaxError(f"Ожидалось число, а не '{self.current_token}'")
+
+            self.next_token()
+
         return result
-    else:
-        # Обработка обычного числа
-        if current_token is None:
-            raise SyntaxError("Выражение неполное - ожидалось число")
+
+    def unary(self) -> float:
+        """Обрабатывает унарные операторы"""
+        if self.current_token in ['+', '-']:
+            if self.pos > 0 and self.tokens[self.pos - 1] in ['+', '-', '*', '/', '//', '%', '**']:
+                raise SyntaxError(f"Два оператора подряд: '{self.tokens[self.pos - 1]}' и '{self.current_token}'")
+
+            operator = self.current_token
+            self.next_token()
+            if self.current_token is None:
+                raise SyntaxError(f"После унарного '{operator}' ожидалось число")
+            if self.current_token == '(':
+                result = self.unary()
+            else:
+                result = self.pow()
+            return result if operator == '+' else -result
+        return self.primary()
+
+    def pow(self) -> float:
+        """Обрабатывает операцию возведения в степень"""
+        result = self.unary()
+        if self.current_token == '**':
+            self.next_token()
+            result **= self.pow()
+        return result
+
+    def mul(self) -> float:
+        """Обрабатывает мультипликативные операции"""
+        result = self.pow()
+        while self.current_token in ['*', '/', '//', '%']:
+            operator = self.current_token
+            self.next_token()
+            right = self.pow()
+
+            match operator:
+                case '*':
+                    result *= right
+                case '/':
+                    if right == 0:
+                        raise ZeroDivisionError("Деление на ноль")
+                    result /= right
+                case '//':
+                    if not (result.is_integer() and right.is_integer()):
+                        raise TypeError("// и % только для целых чисел")
+                    if right == 0:
+                        raise ZeroDivisionError("Деление на ноль")
+                    result //= right
+                case '%':
+                    if not (result.is_integer() and right.is_integer()):
+                        raise TypeError("// и % только для целых чисел")
+                    if right == 0:
+                        raise ZeroDivisionError("Деление на ноль")
+                    result %= right
+        return result
+
+    def add(self) -> float:
+        """Обрабатывает аддитивные операции"""
+        result = self.mul()
+
+        while self.current_token in ['+', '-']:
+            operator = self.current_token
+            self.next_token()
+            if operator == '+':
+                result += self.mul()
+            else:
+                result -= self.mul()
+
+        return result
+
+    def expr(self) -> float:
+        """Начинает разбор выражения"""
+        return self.add()
+
+    def calculate(self, exp: str) -> float:
+        """Вычисляет математическое выражение"""
+        self.tokens = tokenize(exp)
+
+        if not self.tokens:
+            raise ValueError("Пустое выражение")
+
+        self.current_token = self.tokens[0]
+        self.pos = 0
+
+        result = self.expr()
+
+        if self.current_token is not None:
+            raise SyntaxError(f"Лишнее в конце: '{self.current_token}'")
 
         try:
-            num = float(current_token)
-        except ValueError:
-            raise SyntaxError(f"Ожидалось число, а не '{current_token}'")
-
-        next_token()
-        return num
-
-
-def unary():
-    """Обрабатывает унарные + и - (знаки перед числами)"""
-    global current_token
-
-    if current_token in ['+', '-']:
-        # Запрещаем два оператора подряд
-        if pos > 0 and tokens[pos - 1] in ['+', '-', '*', '/', '//', '%', '**']:
-            raise SyntaxError(f"Два оператора подряд: '{tokens[pos - 1]}' и '{current_token}'")
-
-        op = current_token
-        next_token()
-        if current_token is None:
-            raise SyntaxError(f"После унарного '{op}' ожидалось число")
-
-        # Проверяем, не идет ли после унарного оператора степень
-        if current_token == '(':
-            # Если скобка - разбираем как обычно
-            value = unary()
-        else:
-            # Если не скобка, разбираем через pow, чтобы правильно обработать **
-            value = pow()
-
-        return value if op == '+' else -value
-    else:
-        return primary()
-
-
-def pow():
-    """Обрабатывает степень ** (право-ассоциативная)"""
-    result = unary()
-
-    if current_token == '**':
-        next_token()
-        right = pow()
-        result = result ** right
-    return result
-
-
-def mul():
-    """Обрабатывает *, /, //, %"""
-    result = pow()
-
-    while current_token in ['*', '/', '//', '%']:
-        op = current_token
-        next_token()
-        right = pow()
-
-        if op == '*':
-            result *= right
-        elif op == '/':
-            if right == 0:
-                raise ZeroDivisionError("Деление на ноль")
-            result /= right
-        elif op == '//':
-            # // и % работают только с целыми числами
-            if not (result.is_integer() and right.is_integer()):
-                raise TypeError("// и % только для целых чисел")
-            if right == 0:
-                raise ZeroDivisionError("Деление на ноль")
-            result = int(result) // int(right)
-        elif op == '%':
-            if not (result.is_integer() and right.is_integer()):
-                raise TypeError("// и % только для целых чисел")
-            if right == 0:
-                raise ZeroDivisionError("Деление на ноль")
-            result = int(result) % int(right)
-
-    return result
-
-
-def add():
-    """Обрабатывает + и -"""
-    result = mul()
-
-    while current_token in ['+', '-']:
-        op = current_token
-        next_token()
-        right = mul()
-        if op == '+':
-            result += right
-        else:
-            result -= right
-
-    return result
-
-
-def expr():
-    return add()
-
-
-def calculate(expression):
-    """Главная функция - вычисляет выражение"""
-    global tokens, current_token, pos
-
-    tokens = tokenize(expression)
-
-    if not tokens:
-        raise ValueError("Пустое выражение")
-
-    pos = 0
-    current_token = tokens[0]
-
-    result = expr()
-
-    # Проверяем что разобрали всё выражение (не осталось лишних токенов)
-    if current_token is not None:
-        raise SyntaxError(f"Лишнее в конце: '{current_token}'")
-
-    # Если результат целый - возвращаем как int
-    if result.is_integer():
-        return int(result)
-    else:
-        return result
+            return int(result) if result.is_integer() else result
+        except AttributeError:
+            raise Exception("Ответ не принадлежит R")
